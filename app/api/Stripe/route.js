@@ -1,4 +1,5 @@
 
+import connectDb from '@/config/db';
 import Order from '@/models/Order';
 import { User } from '@clerk/clerk-sdk-node';
 import { NextResponse } from 'next/server';
@@ -27,7 +28,7 @@ export async function POST(request) {
 
                 const { orderId, userId } = session.data[0].metadata
 
-                await connectDB()
+                await connectDb()
 
                 if (isPaid) {
                     await Order.findByIdAndUpdate(
@@ -63,6 +64,7 @@ export async function POST(request) {
             }
 
             return NextResponse.json({ received: true });
+
 
 
     } catch (error) {
