@@ -11,11 +11,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2023-10-16',
 });
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
 
 export async function POST(req) {
   try {
@@ -82,3 +77,9 @@ export async function POST(req) {
     });
   }
 }
+
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
