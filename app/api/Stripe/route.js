@@ -1,5 +1,3 @@
-// app/api/stripe/route.js
-
 import connectDb from '@/config/db';
 import Order from '@/models/Order';
 import { User } from '@/models/User';
@@ -20,11 +18,12 @@ export async function POST(request) {
     );
 
     const handlePaymentIntent = async (paymentIntentId, isPaid) => {
-      const session = await stripe.checkout.sessions.list({
+      const sessionList = await stripe.checkout.sessions.list({
         payment_intent: paymentIntentId,
       });
 
-      const { orderId, userId } = session.data[0].metadata;
+      const session = sessionList.data[0];
+      const { orderId, userId } = session.metadata;
 
       await connectDb();
 
@@ -52,12 +51,12 @@ export async function POST(request) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('Webhook error:', error.message);
     return NextResponse.json({ message: error.message }, { status: 400 });
   }
 }
 
-// ✅ Important fix here
+// Required for raw Stripe body parsing
 export const config = {
   api: {
     bodyParser: false,
