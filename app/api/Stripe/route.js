@@ -16,7 +16,7 @@ export async function POST(request) {
         const sig = request.headers.get('stripe-signature')
 
         const event = stripe.webhooks.constructEvent(
-            body,sig,process.env.STRIPE_WEBHOOK_SECRET)
+            body,sig,process.env.STRIPE_WEBHOOK_KEY)
 
 
             const handlePaymentIntent = async (paymentIntentId, isPaid) => {
