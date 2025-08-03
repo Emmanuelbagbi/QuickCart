@@ -1,76 +1,87 @@
+
 import connectDb from '@/config/db';
 import Order from '@/models/Order';
 import { User } from '@/models/User';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+ 
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
-/**
- * Handle Stripe Webhook
- */
+
 export async function POST(request) {
-  try {
-    const body = await request.text();
-    const sig = request.headers.get('stripe-signature');
 
-    const event = stripe.webhooks.constructEvent(
-      body,
-      sig,
-      process.env.STRIPE_WEBHOOK_KEY
-    );
+    try {
+        
+        const body = await request.text()
+        const sig = request.headers.get('stripe-signature')
 
-    // Helper to process payment status
-    const handlePaymentIntent = async (paymentIntentId, isPaid) => {
-      const sessions = await stripe.checkout.sessions.list({
-        payment_intent: paymentIntentId,
-        limit: 1,
-      });
+        const event = stripe.webhooks.constructEvent(
+            body,sig,process.env.STRIPE_WEBHOOK_KEY)
 
-      const session = sessions.data[0];
 
-      if (!session || !session.metadata) {
-        console.error('Session or metadata missing for payment intent:', paymentIntentId);
-        return;
-      }
+            const handlePaymentIntent = async (paymentIntentId, isPaid) => {
 
-      const { orderId, userId } = session.metadata;
+                const session = await stripe.checkout.sessions.list({
+                    payment_intent: paymentIntentId,
+                })
 
-      await connectDb();
+                const { orderId, userId } = session.data[0].metadata
 
-      if (isPaid) {
-        await Order.findByIdAndUpdate(orderId, { isPaid: true });
-        await User.findByIdAndUpdate(userId, { cartItems: {} });
-      } else {
-        await Order.findByIdAndDelete(orderId);
-      }
-    };
+                await connectDb()
 
-    // Switch on event type
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-        await handlePaymentIntent(event.data.object.id, true);
-        break;
+                if (isPaid) {
+                    await Order.findByIdAndUpdate(
+                        orderId,
+                        { isPaid: true }
+                    )
+                    await User.findByIdAndUpdate(
+                        userId,
+                        { cartItems: {} }
+                    )
+                } else {
+                    await Order.findByIdAndDelete(
+                        orderId)
+                }
 
-      case 'payment_intent.canceled':
-        await handlePaymentIntent(event.data.object.id, false);
-        break;
+            };
 
-      default:
-        console.warn(`Unhandled Stripe event type: ${event.type}`);
-        break;
+
+            switch (event.type) {
+                case 'payment_intent.succeeded':{
+                    await handlePaymentIntent(event.data.object.id, true);
+                    break;
+                }
+
+                case 'payment_intent.canceled':{
+                    await handlePaymentIntent(event.data.object.id, false);
+                    break;
+                }
+                default:
+                    console.error(event.type);
+                break;
+
+            }
+
+            return NextResponse.json({ received: true });
+
+
+
+    } catch (error) {
+        console.error(error);
+        return NextResponse.json({ message: error.message });
     }
-
-    return NextResponse.json({ received: true });
-  } catch (error) {
-    console.error('Webhook Error:', error.message);
-    return NextResponse.json({ message: error.message }, { status: 400 });
-  }
+    
 }
 
-// Required to disable default body parsing for Stripe signature verification
 export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+    api:{bodyparser:false}
+}
+
+
+
+
+
+
+
+// Check here
