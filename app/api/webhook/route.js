@@ -17,28 +17,52 @@ export async function POST(request) {
       process.env.STRIPE_WEBHOOK_KEY
     );
 
-    await connectDb();
+    const handlePaymentIntent = async (paymentIntentId, isPaid) => {
+      // Get session by paymentIntent
+      const sessions = await stripe.checkout.sessions.list({
+        payment_intent: paymentIntentId,
+        limit: 1,
+      });
 
-    // Handle event types
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
+      const session = sessions.data[0];
+
+      if (!session || !session.metadata) {
+        console.error('Session or metadata missing');
+        return;
+      }
 
       const { orderId, userId } = session.metadata;
 
-      if (!orderId || !userId) {
-        throw new Error('Missing metadata in session');
+      await connectDb();
+
+      if (isPaid) {
+        await Order.findByIdAndUpdate(orderId, { isPaid: true });
+        await User.findByIdAndUpdate(userId, { cartItems: {} });
+      } else {
+        await Order.findByIdAndDelete(orderId);
+      }
+    };
+
+    switch (event.type) {
+      case 'payment_intent.succeeded': {
+        await handlePaymentIntent(event.data.object.id, true);
+        break;
       }
 
-      await Order.findByIdAndUpdate(orderId, { isPaid: true });
-      await User.findByIdAndUpdate(userId, { cartItems: {} });
+      case 'payment_intent.canceled': {
+        await handlePaymentIntent(event.data.object.id, false);
+        break;
+      }
+
+      default:
+        console.warn(`Unhandled event type: ${event.type}`);
+        break;
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error('Webhook Error:', error.message);
-    return new NextResponse(`Webhook Error: ${error.message}`, {
-      status: 400,
-    });
+    return NextResponse.json({ message: error.message });
   }
 }
 
