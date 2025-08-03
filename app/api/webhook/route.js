@@ -17,57 +17,52 @@ export async function POST(request) {
       process.env.STRIPE_WEBHOOK_KEY
     );
 
-    const handlePaymentIntent = async (paymentIntentId, isPaid) => {
-      // Use retrieve instead of list to get metadata
-      const sessions = await stripe.checkout.sessions.list({
-        payment_intent: paymentIntentId,
-      });
-
-      const sessionId = sessions.data[0]?.id;
-      if (!sessionId) throw new Error('Session ID not found');
-
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-      const { orderId, userId } = session.metadata;
-
-      await connectDb();
-
-      if (isPaid) {
-        await Order.findByIdAndUpdate(orderId, { isPaid: true });
-
-        await User.findByIdAndUpdate(userId, { cartItems: {} });
-
-        // Optional: bulk update older matching orders
-        await Order.updateMany(
-          { paymentType: 'Stripe', isPaid: false },
-          { isPaid: true }
-        );
-      } else {
-        await Order.findByIdAndDelete(orderId);
-      }
-    };
+    // Connect to DB
+    await connectDb();
 
     switch (event.type) {
-      case 'payment_intent.succeeded':
-        await handlePaymentIntent(event.data.object.id, true);
-        break;
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const { orderId, userId } = session.metadata;
 
-      case 'payment_intent.canceled':
-        await handlePaymentIntent(event.data.object.id, false);
+        if (!orderId || !userId) {
+          throw new Error('Missing metadata in Stripe session');
+        }
+
+        // Mark order as paid
+        await Order.findByIdAndUpdate(orderId, { isPaid: true });
+
+        // Clear user's cart
+        await User.findByIdAndUpdate(userId, { cartItems: {} });
+
         break;
+      }
+
+      case 'checkout.session.expired': {
+        const session = event.data.object;
+        const { orderId } = session.metadata;
+
+        if (orderId) {
+          await Order.findByIdAndDelete(orderId);
+        }
+
+        break;
+      }
 
       default:
-        console.error(event.type);
+        console.warn(`Unhandled event type: ${event.type}`);
         break;
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error(error);
+    console.error('Webhook Error:', error.message);
     return NextResponse.json({ message: error.message });
   }
 }
 
 export const config = {
-  api: { bodyParser: false },
+  api: {
+    bodyParser: false,
+  },
 };
