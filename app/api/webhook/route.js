@@ -17,47 +17,30 @@ export async function POST(request) {
       process.env.STRIPE_WEBHOOK_KEY
     );
 
-    // Connect to DB
-    await connectDb();
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
 
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object;
-        const { orderId, userId } = session.metadata;
+      const { orderId, userId } = session.metadata;
 
-        if (!orderId || !userId) {
-          throw new Error('Missing metadata in Stripe session');
-        }
-
-        // Mark order as paid
-        await Order.findByIdAndUpdate(orderId, { isPaid: true });
-
-        // Clear user's cart
-        await User.findByIdAndUpdate(userId, { cartItems: {} });
-
-        break;
+      if (!orderId || !userId) {
+        throw new Error('Missing metadata from Stripe session');
       }
 
-      case 'checkout.session.expired': {
-        const session = event.data.object;
-        const { orderId } = session.metadata;
+      await connectDb();
 
-        if (orderId) {
-          await Order.findByIdAndDelete(orderId);
-        }
+      await Order.findByIdAndUpdate(orderId, { isPaid: true });
+      await User.findByIdAndUpdate(userId, { cartItems: {} });
 
-        break;
-      }
-
-      default:
-        console.warn(`Unhandled event type: ${event.type}`);
-        break;
+      console.log('✅ Order marked as paid and cart cleared');
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error('Webhook Error:', error.message);
-    return NextResponse.json({ message: error.message });
+    return new NextResponse(
+      JSON.stringify({ message: error.message }),
+      { status: 400 }
+    );
   }
 }
 
