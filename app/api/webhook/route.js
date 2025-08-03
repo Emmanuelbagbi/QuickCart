@@ -3,16 +3,19 @@ import Order from '@/models/Order';
 import { User } from '@/models/User';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { buffer } from 'micro';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: '2023-10-16',
+});
 
 export async function POST(request) {
   try {
-    const body = await request.text();
+    const rawBody = await buffer(request);
     const sig = request.headers.get('stripe-signature');
 
     const event = stripe.webhooks.constructEvent(
-      body,
+      rawBody,
       sig,
       process.env.STRIPE_WEBHOOK_KEY
     );
@@ -20,44 +23,48 @@ export async function POST(request) {
     // Connect to DB
     await connectDb();
 
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object;
-        const { orderId, userId } = session.metadata;
+    // Handle session completed
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
 
-        if (!orderId || !userId) {
-          throw new Error('Missing metadata in Stripe session');
-        }
+      console.log('Session metadata:', session.metadata);
 
-        // Mark order as paid
-        await Order.findByIdAndUpdate(orderId, { isPaid: true });
+      const { orderId, userId } = session.metadata || {};
 
-        // Clear user's cart
-        await User.findByIdAndUpdate(userId, { cartItems: {} });
-
-        break;
+      if (!orderId || !userId) {
+        throw new Error('Missing metadata in Stripe session');
       }
 
-      case 'checkout.session.expired': {
-        const session = event.data.object;
-        const { orderId } = session.metadata;
+      const updatedOrder = await Order.findByIdAndUpdate(orderId, {
+        isPaid: true,
+      });
 
-        if (orderId) {
-          await Order.findByIdAndDelete(orderId);
-        }
-
-        break;
+      if (!updatedOrder) {
+        throw new Error('Order not found');
       }
 
-      default:
-        console.warn(`Unhandled event type: ${event.type}`);
-        break;
+      // Clear user cart
+      await User.findByIdAndUpdate(userId, { cartItems: {} });
+
+      console.log(`Order ${orderId} marked as paid`);
+    }
+
+    // Optional: handle session expiration
+    if (event.type === 'checkout.session.expired') {
+      const session = event.data.object;
+      const { orderId } = session.metadata || {};
+      if (orderId) {
+        await Order.findByIdAndDelete(orderId);
+        console.log(`Expired order ${orderId} deleted`);
+      }
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error('Webhook Error:', error.message);
-    return NextResponse.json({ message: error.message });
+    console.error('Stripe Webhook Error:', error.message);
+    return new Response(`Webhook Error: ${error.message}`, {
+      status: 400,
+    });
   }
 }
 
