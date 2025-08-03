@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import mongoose from 'mongoose';
-import Order from '@/models/Order'; // adjust path if needed
+import Order from '@/models/Order'; // adjust path
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -11,7 +11,6 @@ export const config = {
   },
 };
 
-// Handle raw request body
 async function buffer(readable) {
   const chunks = [];
   for await (const chunk of readable) {
@@ -20,7 +19,6 @@ async function buffer(readable) {
   return Buffer.concat(chunks);
 }
 
-// Connect to MongoDB
 async function connectToDB() {
   if (mongoose.connection.readyState === 0) {
     await mongoose.connect(process.env.MONGODB_URI, {
@@ -32,10 +30,16 @@ async function connectToDB() {
 
 export async function POST(req) {
   const rawBody = await buffer(req.body);
+
+  // ✅ Fix: Ensure signature is safely retrieved
   const signature = req.headers.get('stripe-signature');
 
-  let event;
+  if (!signature) {
+    console.error('❌ Missing stripe-signature header.');
+    return new NextResponse('Missing signature', { status: 400 });
+  }
 
+  let event;
   try {
     event = stripe.webhooks.constructEvent(
       rawBody,
@@ -47,23 +51,22 @@ export async function POST(req) {
     return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
   }
 
-  // ✅ Handle payment success
+  // ✅ Handle successful checkout
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const orderId = session.metadata?.orderId;
 
     try {
       await connectToDB();
-
       await Order.findByIdAndUpdate(orderId, {
         isPaid: true,
         paymentType: 'Stripe',
       });
 
       console.log(`✅ Order ${orderId} marked as paid.`);
-    } catch (error) {
-      console.error('❌ Failed to update order:', error.message);
-      return new NextResponse('DB Error', { status: 500 });
+    } catch (err) {
+      console.error('❌ DB update error:', err.message);
+      return new NextResponse('Database error', { status: 500 });
     }
   }
 
