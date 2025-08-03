@@ -17,7 +17,7 @@ export async function POST(request) {
       process.env.STRIPE_WEBHOOK_KEY
     );
 
-    if (event.type === 'checkout.session.completed') {
+    if (event.type === 'checkout.session.succeeded') {
       const session = event.data.object;
 
       const { orderId, userId } = session.metadata;
