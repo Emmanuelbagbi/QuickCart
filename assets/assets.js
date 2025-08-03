@@ -37,6 +37,7 @@ import playstation_image from "./playstation_image.png";
 import girl_with_headphone_image from "./girl_with_headphone_image.png";
 import girl_with_earphone_image from "./girl_with_earphone_image.png";
 import md_controller_image from "./md_controller_image.png";
+import stripe_logo from "./stripe_logo.png";
 import sm_controller_image from "./sm_controller_image.png";
 import jbl_soundbox_image from "./jbl_soundbox_image.png";
 import boy_with_laptop_image from "./boy_with_laptop_image.png";
@@ -49,6 +50,7 @@ import product_details_page_apple_earphone_image5 from "./product_details_page_a
 
 export const assets = {
   logo,
+  stripe_logo,
   search_icon,
   user_icon,
   cart_icon,
