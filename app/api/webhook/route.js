@@ -6,6 +6,9 @@ import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+/**
+ * Handle Stripe Webhook
+ */
 export async function POST(request) {
   try {
     const body = await request.text();
@@ -17,8 +20,8 @@ export async function POST(request) {
       process.env.STRIPE_WEBHOOK_KEY
     );
 
+    // Helper to process payment status
     const handlePaymentIntent = async (paymentIntentId, isPaid) => {
-      // Get session by paymentIntent
       const sessions = await stripe.checkout.sessions.list({
         payment_intent: paymentIntentId,
         limit: 1,
@@ -27,7 +30,7 @@ export async function POST(request) {
       const session = sessions.data[0];
 
       if (!session || !session.metadata) {
-        console.error('Session or metadata missing');
+        console.error('Session or metadata missing for payment intent:', paymentIntentId);
         return;
       }
 
@@ -43,29 +46,29 @@ export async function POST(request) {
       }
     };
 
+    // Switch on event type
     switch (event.type) {
-      case 'payment_intent.succeeded': {
+      case 'payment_intent.succeeded':
         await handlePaymentIntent(event.data.object.id, true);
         break;
-      }
 
-      case 'payment_intent.canceled': {
+      case 'payment_intent.canceled':
         await handlePaymentIntent(event.data.object.id, false);
         break;
-      }
 
       default:
-        console.warn(`Unhandled event type: ${event.type}`);
+        console.warn(`Unhandled Stripe event type: ${event.type}`);
         break;
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error('Webhook Error:', error.message);
-    return NextResponse.json({ message: error.message });
+    return NextResponse.json({ message: error.message }, { status: 400 });
   }
 }
 
+// Required to disable default body parsing for Stripe signature verification
 export const config = {
   api: {
     bodyParser: false,
