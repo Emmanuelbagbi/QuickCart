@@ -95,7 +95,7 @@ const Cart = () => {
                           </button>
                         </div>
                       </td>
-                      <td className="py-4 md:px-4 px-1 text-gray-600">${(product.offerPrice * cartItems[itemId]).toFixed(2)}</td>
+                      <td className="py-4 md:px-4 px-1 text-gray-600">₦{(product.offerPrice * cartItems[itemId]).toFixed(2)}</td>
                     </tr>
                   );
                 })}
